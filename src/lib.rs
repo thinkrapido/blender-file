@@ -35,13 +35,15 @@ impl BlenderFile {
 
     file.read_to_end(&mut vector).expect(&format!("File {:?} cannot be read.", file));
 
-    let arch = match *(&vector[7]) as char {
+    assert_eq!([0x42u8, 0x4cu8, 0x45u8, 0x4eu8, 0x44u8, 0x45u8, 0x52u8], vector[..7], "It is not a blender file.");
+
+    let arch = match vector[7] as char {
         '-' => Arch::Arch64,
         '_' => Arch::Arch32,
         _ => panic!("architecture marker doesn't match"),
       };
 
-    let endian = match *(&vector[8]) as char {
+    let endian = match vector[8] as char {
         'v' => Endian::LittleEndian,
         'V' => Endian::BigEndian,
         _ => panic!("endian marker doesn't match"),
@@ -61,20 +63,20 @@ impl BlenderFile {
 
 }
 
-macro_rules! matches{
-  ($e: expr, $p: pat) => (
-    match $e {
-      $p => true,
-      _ => false,
-    }
-  )
-}
-
 
 #[cfg(test)]
 mod tests {
 
   use super::*;
+
+  macro_rules! matches{
+    ($e: expr, $p: pat) => (
+      match $e {
+        $p => true,
+        _ => false,
+      }
+    )
+  }
 
   #[test]
   fn create_new_blenderfile() {
