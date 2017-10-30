@@ -4,3 +4,4 @@ version = "0.1.0"
 authors = ["Romeo Disca <romeo.disca@gmail.com>"]
 
 [dependencies]
+endian-type = "0.1.2"

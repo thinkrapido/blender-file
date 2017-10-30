@@ -1,4 +1,8 @@
 
+extern crate endian_type;
+
+use endian_type::types::*;
+
 use std::fs::File;
 use std::io::Read;
 use std::vec::Vec;
@@ -22,7 +26,9 @@ pub struct BlenderFile {
   pub version: String,
   pub endian: Endian,
   pub arch: Arch,
+  pub pointer_size: usize,
   pub content: Vec<u8>,
+  pub file_block_headers: Vec<FileBlockHeader>,
 }
 
 impl BlenderFile {
@@ -49,20 +55,97 @@ impl BlenderFile {
         _ => panic!("endian marker doesn't match"),
       };
 
-    let out = BlenderFile {
+    let mut out = BlenderFile {
       file: String::from(filename),
       version: String::from(str::from_utf8(&vector[9..12]).unwrap()),
       content: vector,
+      pointer_size: match &arch {
+                      &Arch::Arch32 => 4,
+                      &Arch::Arch64 => 8,
+                    },
       arch: arch,
       endian: endian,
+      file_block_headers: Vec::new(),
     };
 
+    out.load_file_block_headers();
 
     out
   }
 
+  pub fn u32(&self, offset: usize) -> u32 {
+    match self.endian {
+      Endian::LittleEndian => u32_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => u32_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
+  pub fn u64(&self, offset: usize) -> u64 {
+    match self.endian {
+      Endian::LittleEndian => u64_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => u64_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
+  pub fn i32(&self, offset: usize) -> i32 {
+    match self.endian {
+      Endian::LittleEndian => i32_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => i32_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
+  pub fn i64(&self, offset: usize) -> i64 {
+    match self.endian {
+      Endian::LittleEndian => i64_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => i64_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
+  fn load_file_block_headers(&mut self) {
+    let mut offset = 12;
+    let endb = String::from("ENDB");
+    loop {
+      let fbh = FileBlockHeader::new(self, offset);
+      offset = offset + 16 + self.pointer_size + fbh.size as usize;
+      let stop = fbh.code == endb;
+      self.file_block_headers.push(fbh);
+      if stop {
+        break;
+      }
+    }
+  }
+
 }
 
+#[derive(Debug)]
+pub struct FileBlockHeader {
+  pub offset: usize,
+  pub code: String,
+  pub size: u32,
+  pub old_mem_adr: u64,
+  pub sdna_index: u32,
+  pub count: u32,
+}
+
+impl FileBlockHeader
+{
+
+  pub fn new(bf: &BlenderFile, offset: usize) -> FileBlockHeader {
+    let out = FileBlockHeader {
+      offset: offset,
+      code: String::from(str::from_utf8(&bf.content[offset..offset+4]).unwrap()),
+      size: bf.u32(offset+4usize),
+      old_mem_adr: match bf.arch {
+        Arch::Arch32 => bf.u32(offset+8usize) as u64,
+        Arch::Arch64 => bf.u64(offset+8usize),
+      },
+      sdna_index: bf.u32(offset+bf.pointer_size+8usize),
+      count: bf.u32(offset+bf.pointer_size+12usize),
+    };
+    out
+  }
+
+}
 
 #[cfg(test)]
 mod tests {
