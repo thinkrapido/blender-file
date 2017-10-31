@@ -73,6 +73,13 @@ impl BlenderFile {
     out
   }
 
+  pub fn u16(&self, offset: usize) -> u16 {
+    match self.endian {
+      Endian::LittleEndian => u16_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => u16_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
   pub fn u32(&self, offset: usize) -> u32 {
     match self.endian {
       Endian::LittleEndian => u32_le::from_bytes(&self.content[offset..]).into(),
@@ -84,6 +91,13 @@ impl BlenderFile {
     match self.endian {
       Endian::LittleEndian => u64_le::from_bytes(&self.content[offset..]).into(),
       Endian::BigEndian    => u64_be::from_bytes(&self.content[offset..]).into(),
+    }
+  }
+
+  pub fn i16(&self, offset: usize) -> i16 {
+    match self.endian {
+      Endian::LittleEndian => i16_le::from_bytes(&self.content[offset..]).into(),
+      Endian::BigEndian    => i16_be::from_bytes(&self.content[offset..]).into(),
     }
   }
 
@@ -104,15 +118,111 @@ impl BlenderFile {
   fn load_file_block_headers(&mut self) {
     let mut offset = 12;
     let endb = String::from("ENDB");
+    let dna1 = String::from("DNA1");
     loop {
       let fbh = FileBlockHeader::new(self, offset);
       offset = offset + 16 + self.pointer_size + fbh.size as usize;
       let stop = fbh.code == endb;
+      if fbh.code == dna1 {
+        self.read_dna(&fbh);
+      }
       self.file_block_headers.push(fbh);
       if stop {
         break;
       }
     }
+  }
+
+  fn read_dna(&mut self, dna_block: &FileBlockHeader) {
+    let mut offset = 16 + self.pointer_size + dna_block.offset;
+    if !self.compare_identifier("SDNA", offset) {
+      panic!("cannot find SDNA signature");
+    }
+    offset += 4;
+    if !self.compare_identifier("NAME", offset) {
+      panic!("cannot find NAME signature");
+    }
+
+
+    let mut names = Vec::<String>::new();
+    self.get_names(&mut names, &"TYPE", &mut offset);
+
+    let mut types = Vec::<String>::new();
+    self.get_names(&mut types, &"TLEN", &mut offset);
+
+    offset += 4;
+    let mut type_lens = Vec::<usize>::new();
+    for _i in 0..types.len()-1 {
+      let len = self.i16(offset) as usize;
+      type_lens.push(len);
+      offset += 2;
+    }
+    offset += 2;
+
+    let breaker = "STRC";
+    if !self.compare_identifier(breaker, offset) {
+      panic!("cannot find {} signature", breaker);
+    }
+
+    offset += 4;
+    let len = self.i32(offset) as usize;
+    offset += 4;
+    for _i in 0..len {
+      let structure_idx = self.i16(offset) as usize;
+      let structure = &types[structure_idx];
+      offset += 2;
+
+//      print!("{} {{\n", structure);
+
+      let fields = self.i16(offset) as usize;
+      offset += 2;
+      for _f in 0..fields {
+        let type_idx = self.i16(offset) as usize;
+        let ty = &types[type_idx];
+        offset += 2;
+
+        let name_idx = self.i16(offset) as usize;
+        let name = &names[name_idx];
+        offset += 2;
+
+//        print!("\t{}\t{};\n", ty, name);
+      }
+
+//      print!("}}\n\n");
+    }
+  }
+
+  fn get_names(&self, names: &mut Vec<String>, breaker: &str, offset: &mut usize) {
+    let len = self.i32((*offset) + 4) as usize;
+
+    *offset += 8;
+    while !self.compare_identifier(breaker, *offset) {
+      let (name, new_offset) = self.get_name(*offset);
+      *offset = new_offset;
+      if name != "" {
+        names.push(name);
+      }
+    }
+    if !self.compare_identifier(breaker, *offset) {
+      panic!("cannot find {} signature", breaker);
+    }
+    assert_eq!(len, names.len());
+  }
+
+  fn compare_identifier(&self, source: &str, offset: usize) -> bool {
+      let mut out = true;
+      for (i, c) in source.chars().enumerate() {
+        out = out && (c == self.content[offset + i] as char);
+      }
+      out
+  }
+
+  fn get_name(&self, offset: usize) -> (String, usize) {
+      let mut search = offset;
+      while self.content[search] != 0 {
+        search = search + 1;
+      }
+      (String::from(str::from_utf8(&self.content[offset..search]).unwrap()), search + 1)
   }
 
 }
