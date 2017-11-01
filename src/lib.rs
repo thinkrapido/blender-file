@@ -198,7 +198,7 @@ pub mod sdna {
       }
       Type {
         size: size,
-        is_simple: IS_SIMPLE_RE.is_match(&name[..]),
+        is_simple: SDNA::is_simple(&String::from(&name[..])),
         is_timer: IS_TIMER_RE.is_match(&name[..]),
         name: name,
       }
@@ -211,8 +211,8 @@ pub mod sdna {
     pub declaration: String,
     pub ty: Type,
     pub offset: usize,
-    pub is_pointer: bool,
-    pub is_pointer_pointer: bool,
+    pub pointer_type: PointerType,
+    pub structure_type: StructureType,
     pub dimensions: Vec<usize>,
     pub size: usize,
   }
@@ -221,6 +221,51 @@ pub mod sdna {
   pub struct Structure {
     pub ty: Type,
     pub members: Vec<Member>,
+  }
+
+  #[derive(Debug)]
+  pub enum PointerType {
+    None,
+    Pointer,
+    PointerPointer,
+  }
+
+  #[derive(Debug)]
+  pub enum StructureType {
+    Complex,
+    Char,
+    Str,
+    UChar,
+    Short,
+    UShort,
+    Int,
+    Long,
+    ULong,
+    Float,
+    Double,
+    Int64,
+    UInt64,
+    Void,
+  }
+
+  #[derive(Debug)]
+  pub enum Value {
+    None,
+    Pointer(usize),         // pointer address
+    PointerPointer(usize),  // pointer address
+    Complex(usize),         // offset
+    Char(i8),
+    Str(String),
+    UChar(u8),
+    Short(i16),
+    UShort(u16),
+    Int(i32),
+    Long(i32),
+    ULong(i32),
+    Float(f32),
+    Double(f64),
+    Int64(i64),
+    UInt64(u64),
   }
 
   impl SDNA {
@@ -249,6 +294,16 @@ pub mod sdna {
       SDNA::add_structures(&mut out.structures, &mut offset, &names, &out.types, &bf);
 
       out
+    }
+
+    fn is_simple(source: &String) -> bool {
+      lazy_static! {
+        static ref SIMPLE: Vec<String> = vec![String::from("char"), String::from("uchar"), String::from("short"), String::from("ushort"), String::from("int"), String::from("long"), String::from("ulong"), String::from("float"), String::from("double"), String::from("int64_t"), String::from("uint64_t"), String::from("void")];
+      }
+
+      let res: Vec<&String> = SIMPLE.iter().filter(|s| *s == source).collect();
+
+      res.len() > 0
     }
 
     fn add_types(vec: &mut Vec<Type>, offset: &mut usize, bf: &BlenderFile) {
@@ -327,37 +382,82 @@ pub mod sdna {
             dimensions.push(size);
           }
 
-          let is_pointer_pointer = IS_POINTER_POINTER_RE.is_match(&name[..]);
-          let is_pointer = IS_POINTER_RE.is_match(&name[..]) || is_pointer_pointer;
+          let pointer_type = { 
+            if IS_POINTER_POINTER_RE.is_match(&name[..]) {
+              PointerType::PointerPointer
+            }
+            else if IS_POINTER_RE.is_match(&name[..]) {
+              PointerType::Pointer              
+            }
+            else {
+              PointerType::None
+            }
+          };
+          let structure_type = SDNA::get_structure_type(&ty);
 
           let member = Member {
             identifier: identifier,
             declaration: String::from(&name[..]),
             ty: ty.clone(),
             offset: member_offset,
-            is_pointer: is_pointer,
-            is_pointer_pointer: is_pointer_pointer,
             dimensions: dimensions,
-            size: overall_size * match is_pointer {
-              true => bf.pointer_size,
+            size: overall_size * match &pointer_type {
+              &PointerType::Pointer => bf.pointer_size,
+              &PointerType::PointerPointer => bf.pointer_size,
               _ => ty.size,
             },
+            pointer_type: pointer_type,
+            structure_type: structure_type,
           };
 
           structure.members.push(member);
 
-  /*        if DIMENSIONS_RE.is_match(&name[..]) {
-            println!("{:?}", member);
-          }
-
-  *///        println!("{:?}", member);
-
-  //        print!("\t{}\t{};\n", ty, name);
         }
 
-  //      print!("{:?}\n\n", structure);
         vec.push(structure);
       }
+    }
+
+    fn get_structure_type(ty: &Type) -> StructureType {
+      if ty.name == String::from("char") {
+        StructureType::Char
+      }
+      else if ty.name == String::from("uchar") {
+        StructureType::UChar
+      }
+      else if ty.name == String::from("short") {
+        StructureType::Short
+      }
+      else if ty.name == String::from("ushort") {
+        StructureType::UShort
+      }
+      else if ty.name == String::from("int") {
+        StructureType::Int
+      }
+      else if ty.name == String::from("long") {
+        StructureType::Long
+      }
+      else if ty.name == String::from("ulong") {
+        StructureType::ULong
+      }
+      else if ty.name == String::from("float") {
+        StructureType::Float
+      }
+      else if ty.name == String::from("double") {
+        StructureType::Double
+      }
+      else if ty.name == String::from("int64_t") {
+        StructureType::Int64
+      }
+      else if ty.name == String::from("uint64_t") {
+        StructureType::UInt64
+      }
+      else if ty.name == String::from("void") {
+        StructureType::Void
+      }
+      else {
+        StructureType::Complex
+      }     
     }
 
     fn find_dna1_offset(fbh: &Vec<FileBlockHeader>) -> Option<usize> {
