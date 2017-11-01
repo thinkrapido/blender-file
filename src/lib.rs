@@ -208,6 +208,7 @@ pub mod sdna {
   #[derive(Debug)]
   pub struct Member {
     pub identifier: String,
+    pub declaration: String,
     pub ty: Type,
     pub offset: usize,
     pub is_pointer: bool,
@@ -305,13 +306,21 @@ pub mod sdna {
           }
 
           lazy_static! {
+            static ref IDENTIFIER_RE: Regex = Regex::new(r"[_a-zA-Z0-9]+").unwrap();
             static ref IS_POINTER_RE: Regex = Regex::new(r"^\*\w").unwrap();
             static ref IS_POINTER_POINTER_RE: Regex = Regex::new(r"^\*\*\w").unwrap();
             static ref DIMENSIONS_RE: Regex = Regex::new(r"\[([^\]]+)\]").unwrap();
           }
 
-          let mut dimensions = Vec::new();
           let mut overall_size = 1;
+
+          let mut identifier = String::from("");
+          for cap in IDENTIFIER_RE.captures_iter(&name[..]) {
+            identifier = String::from(&cap[0]);
+            break;
+          }          
+          
+          let mut dimensions = Vec::new();
           for cap in DIMENSIONS_RE.captures_iter(&name[..]) {
             let size: usize = *(&cap[1].parse().unwrap());
             overall_size *= size;
@@ -322,7 +331,8 @@ pub mod sdna {
           let is_pointer = IS_POINTER_RE.is_match(&name[..]) || is_pointer_pointer;
 
           let member = Member {
-            identifier: String::from(&name[..]),
+            identifier: identifier,
+            declaration: String::from(&name[..]),
             ty: ty.clone(),
             offset: member_offset,
             is_pointer: is_pointer,
