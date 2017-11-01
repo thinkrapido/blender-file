@@ -113,7 +113,7 @@ pub mod bf {
     }
 
   }
-    
+
 }
 
 pub mod file_block {
@@ -182,6 +182,21 @@ pub mod sdna {
     pub structures: Vec<Structure>,
   }
 
+  impl SDNA {
+    pub fn structure(&self, name: &String) -> Option<&Structure> {
+      let res: Vec<&Structure> = self.structures.iter().filter(|s| s.name() == *name).collect();
+
+      let len: usize = res.len();
+
+      if len == 0 {
+        None
+      }
+      else {
+        Some(&res[0])
+      }
+    }
+  }
+
   #[derive(Debug, Clone)]
   pub struct Type {
     pub name: String,
@@ -193,7 +208,6 @@ pub mod sdna {
   impl Type {
     pub fn new((name, size): (String, usize)) -> Type {
       lazy_static! {
-        static ref IS_SIMPLE_RE: Regex = Regex::new("^[a-z]").unwrap();
         static ref IS_TIMER_RE: Regex = Regex::new("Timer").unwrap();
       }
       Type {
@@ -221,6 +235,54 @@ pub mod sdna {
   pub struct Structure {
     pub ty: Type,
     pub members: Vec<Member>,
+  }
+
+  impl Structure {
+
+    pub fn name(&self) -> String {
+      self.ty.name.clone()
+    }
+
+    pub fn member(&self, name: &String) -> Option<&Member> {
+      let res: Vec<&Member> = self.members.iter().filter(|m| m.identifier == *name).collect();
+
+      let len: usize = res.len();
+
+      if len == 0 {
+        None
+      }
+      else {
+        Some(&res[0])
+      }
+    }
+
+    pub fn pretty_print(&self) -> String {
+      let mut out = String::new();
+
+      out.push_str(&format!("{} {{\n", &self.ty.name)[..]);
+
+      for ref m in self.members.iter() {
+        let mut name = format!("{}                               ", &m.ty.name);
+        name.truncate(20);
+        let mut declaration = format!("{}                               ", &m.declaration);
+        declaration.truncate(25);
+        out.push_str(&format!("\t{}\t{}\t({})\t({:?}", &name, &declaration, &m.size, &m.structure_type)[..]);
+        match m.pointer_type {
+          PointerType::Pointer        => out.push_str(", pointer"),
+          PointerType::PointerPointer => out.push_str(", pPointer"),
+          PointerType::None => (),
+        }
+        if m.dimensions.len() > 0 {
+          out.push_str(&format!(", {}-dim array", &m.dimensions.len())[..]);
+        }
+        out.push_str(");\n");
+      }
+
+      out.push_str("}\n");
+
+      out
+    }
+
   }
 
   #[derive(Debug)]
@@ -325,7 +387,7 @@ pub mod sdna {
       }
     }
 
-    fn add_structures(vec: &mut Vec<Structure>, offset: &mut usize, 
+    fn add_structures(vec: &mut Vec<Structure>, offset: &mut usize,
                       names: &Vec<String>, types: &Vec<Type>, bf: &BlenderFile) {
       if !SDNA::compare_identifier("STRC", *offset, &bf) {
         panic!("cannot find {} signature", "STRC");
@@ -373,8 +435,8 @@ pub mod sdna {
           for cap in IDENTIFIER_RE.captures_iter(&name[..]) {
             identifier = String::from(&cap[0]);
             break;
-          }          
-          
+          }
+
           let mut dimensions = Vec::new();
           for cap in DIMENSIONS_RE.captures_iter(&name[..]) {
             let size: usize = *(&cap[1].parse().unwrap());
@@ -382,12 +444,12 @@ pub mod sdna {
             dimensions.push(size);
           }
 
-          let pointer_type = { 
+          let pointer_type = {
             if IS_POINTER_POINTER_RE.is_match(&name[..]) {
               PointerType::PointerPointer
             }
             else if IS_POINTER_RE.is_match(&name[..]) {
-              PointerType::Pointer              
+              PointerType::Pointer
             }
             else {
               PointerType::None
@@ -457,7 +519,7 @@ pub mod sdna {
       }
       else {
         StructureType::Complex
-      }     
+      }
     }
 
     fn find_dna1_offset(fbh: &Vec<FileBlockHeader>) -> Option<usize> {
@@ -504,12 +566,12 @@ pub mod sdna {
         }
         (String::from(str::from_utf8(&bf.content[offset..search]).unwrap()), search + 1)
     }
-    
+
   }
 }
 
-  
-  
+
+
 #[cfg(test)]
 mod tests {
 
