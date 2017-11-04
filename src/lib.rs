@@ -120,6 +120,7 @@ pub mod file_block {
 
   use super::bf::*;
   use std::str;
+  use std::collections::HashMap;
 
   #[derive(Debug)]
   pub struct FileBlockHeader {
@@ -128,31 +129,18 @@ pub mod file_block {
     pub content_offset: usize,
     pub offset: usize,
     pub sdna_index: usize,
-    pub old_mem_adr: u64,
+    pub old_mem_adr: usize,
+  }
+
+  #[derive(Debug)]
+  pub struct FileBlockHeaderMap {
+    map: HashMap<usize, FileBlockHeader>
   }
 
   impl FileBlockHeader
   {
 
-    pub fn new(bf: &BlenderFile) -> Vec<FileBlockHeader> {
-      let mut out = Vec::new();
-
-      let mut offset = 12;
-      let endb = String::from("ENDB");
-      loop {
-        let fbh = FileBlockHeader::new_bfh(bf, offset);
-        offset += 16 + bf.pointer_size + fbh.size as usize;
-        let stop = fbh.code == endb;
-        out.push(fbh);
-        if stop {
-          break;
-        }
-      }
-
-      out
-    }
-
-    fn new_bfh(bf: &BlenderFile, offset: usize) -> FileBlockHeader {
+    fn new(bf: &BlenderFile, offset: usize) -> FileBlockHeader {
       FileBlockHeader {
         code: String::from(str::from_utf8(&bf.content[offset..offset+4]).unwrap()),
         size: bf.u32(offset+4usize) as usize,
@@ -160,41 +148,59 @@ pub mod file_block {
         offset: offset,
         sdna_index: bf.u32(offset+bf.pointer_size+8usize) as usize,
         old_mem_adr: match bf.arch {
-          Arch::Arch32 => bf.u32(offset+8usize) as u64,
-          Arch::Arch64 => bf.u64(offset+8usize),
+          Arch::Arch32 => bf.u32(offset+8usize) as usize,
+          Arch::Arch64 => bf.u64(offset+8usize) as usize,
         },
       }
     }
+  }
 
+  impl FileBlockHeaderMap
+  {
+
+    pub fn new(bf: &BlenderFile) -> FileBlockHeaderMap {
+      let mut map = HashMap::new();
+
+      let mut offset = 12;
+      let endb = String::from("ENDB");
+      loop {
+        let fbh = FileBlockHeader::new(bf, offset);
+        offset += 16 + bf.pointer_size + fbh.size as usize;
+        let stop = fbh.code == endb;
+        map.insert(fbh.old_mem_adr, fbh);
+        if stop {
+          break;
+        }
+      }
+
+      FileBlockHeaderMap {
+        map: map,
+      }
+    }
+
+    pub fn map(&self) -> &HashMap<usize, FileBlockHeader> {
+      &self.map
+    }
+
+    pub fn get(&self, ptr: &usize) -> Option<&FileBlockHeader> {
+      self.map.get(ptr)
+    }
   }
 }
 
 pub mod sdna {
 
+  use std::str;
+
+  use regex::Regex;
+
   use super::bf::*;
   use super::file_block::*;
-  use std::str;
-  use regex::Regex;
 
   #[derive(Debug)]
   pub struct SDNA {
     pub types: Vec<Type>,
     pub structures: Vec<Structure>,
-  }
-
-  impl SDNA {
-    pub fn structure(&self, name: &String) -> Option<&Structure> {
-      let res: Vec<&Structure> = self.structures.iter().filter(|s| s.name() == *name).collect();
-
-      let len: usize = res.len();
-
-      if len == 0 {
-        None
-      }
-      else {
-        Some(&res[0])
-      }
-    }
   }
 
   #[derive(Debug, Clone)]
@@ -266,7 +272,7 @@ pub mod sdna {
         name.truncate(20);
         let mut declaration = format!("{}                               ", &m.declaration);
         declaration.truncate(25);
-        out.push_str(&format!("\t{}\t{}\t({})\t({:?}", &name, &declaration, &m.size, &m.structure_type)[..]);
+        out.push_str(&format!("\t{}\t{}\t({})\t({})\t({:?}", &name, &declaration, &m.size, &m.offset, &m.structure_type)[..]);
         match m.pointer_type {
           PointerType::Pointer        => out.push_str(", pointer"),
           PointerType::PointerPointer => out.push_str(", pPointer"),
@@ -332,13 +338,14 @@ pub mod sdna {
 
   impl SDNA {
 
-    pub fn new(bf: &BlenderFile, fbh: &Vec<FileBlockHeader>) -> SDNA {
+    pub fn new(bf: &BlenderFile, map: &FileBlockHeaderMap) -> SDNA {
       let mut out = SDNA {
         types: Vec::new(),
         structures: Vec::new(),
       };
 
-      let mut offset = SDNA::find_dna1_offset(&fbh).unwrap();
+      let dna1 = String::from("DNA1");
+      let mut offset = map.map().values().filter(|fbh| fbh.code == dna1 ).next().unwrap().content_offset;
 
       if !SDNA::compare_identifier("SDNA", offset, &bf) {
         panic!("cannot find SDNA signature");
@@ -356,6 +363,19 @@ pub mod sdna {
       SDNA::add_structures(&mut out.structures, &mut offset, &names, &out.types, &bf);
 
       out
+    }
+
+    pub fn structure(&self, name: &String) -> Option<&Structure> {
+      let res: Vec<&Structure> = self.structures.iter().filter(|s| s.name() == *name).collect();
+
+      let len: usize = res.len();
+
+      if len == 0 {
+        None
+      }
+      else {
+        Some(&res[0])
+      }
     }
 
     fn is_simple(source: &String) -> bool {
@@ -520,18 +540,6 @@ pub mod sdna {
       else {
         StructureType::Complex
       }
-    }
-
-    fn find_dna1_offset(fbh: &Vec<FileBlockHeader>) -> Option<usize> {
-      let dna1 = String::from("DNA1");
-
-      for ref fb in fbh.iter() {
-        if fb.code == dna1 {
-          return Some(fb.content_offset);
-        }
-      }
-
-      None
     }
 
     fn get_names(names: &mut Vec<String>, breaker: &str, offset: &mut usize, bf: &BlenderFile) {
