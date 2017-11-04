@@ -300,7 +300,7 @@ pub mod sdna {
 
   #[derive(Debug)]
   pub enum StructureType {
-    Complex,
+    Complex(String),
     Char,
     Str,
     UChar,
@@ -538,8 +538,12 @@ pub mod sdna {
         StructureType::Void
       }
       else {
-        StructureType::Complex
+        StructureType::Complex(ty.name.clone())
       }
+    }
+
+    pub fn get_structure_by_index(&self, idx: usize) -> Option<&Structure> {
+      self.structures.get(idx)
     }
 
     fn get_names(names: &mut Vec<String>, breaker: &str, offset: &mut usize, bf: &BlenderFile) {
