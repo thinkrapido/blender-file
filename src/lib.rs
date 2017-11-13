@@ -141,8 +141,12 @@ pub mod file_block {
   {
 
     fn new(bf: &BlenderFile, offset: usize) -> FileBlockHeader {
+      let mut add = 0;
+      while add < 4 && bf.content[offset+add] > 0 {
+        add += 1;
+      }
       FileBlockHeader {
-        code: String::from(str::from_utf8(&bf.content[offset..offset+4]).unwrap()),
+        code: String::from(str::from_utf8(&bf.content[offset..offset+add]).unwrap()),
         size: bf.u32(offset+4usize) as usize,
         content_offset: offset+bf.pointer_size+16usize,
         offset: offset,
@@ -180,6 +184,21 @@ pub mod file_block {
 
     pub fn map(&self) -> &HashMap<usize, FileBlockHeader> {
       &self.map
+    }
+
+    pub fn find(&self, code: &str) -> Vec<&FileBlockHeader> {
+      let mut out = Vec::<&FileBlockHeader>::new();
+
+      let test = String::from(code);
+
+      for ref val in self.map.values() {
+
+        if (val.code == test) {
+          out.push(val);
+        }
+      }
+
+      out
     }
 
     pub fn get(&self, ptr: &usize) -> Option<&FileBlockHeader> {

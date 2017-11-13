@@ -26,7 +26,10 @@ Execute ```cp -r ../blender-file/resources . && cargo watch -x run -w . -w ../bl
     println!("{}", &s.pretty_print());
   }
 
-  let out = bf.u64(350868 + 232) as usize;
+  let me = fbh_map.find("ME");
+  println!("{:?}", me);
+
+  let out = bf.u64(me[0].content_offset + 232) as usize;
   println!("{}", out);
 
   let vert = &fbh_map.get(&out);
