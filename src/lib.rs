@@ -193,7 +193,7 @@ pub mod file_block {
 
       for ref val in self.map.values() {
 
-        if (val.code == test) {
+        if val.code == test {
           out.push(val);
         }
       }
