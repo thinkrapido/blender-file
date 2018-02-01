@@ -1,17 +1,10 @@
-# blender-file
-rust blender-file interpreter
+extern crate blenderfile;
 
-## Prepare
+use blenderfile::file::*;
+use blenderfile::file_block::*;
+use blenderfile::sdna::*;
 
-Create an executable project in sibling folder.
-
-Execute ```cp -r ../blender-file/resources . && cargo watch -x run -w . -w ../blender-file -s 'mkdir -p target/debug && cp -r resources target/debug'```
-
-## Example Code
-
-```rust
-
-
+fn main() {
   let bf = BlenderFile::new(&"resources/rust-cube.blend");
 
   let fbh_map = FileBlockHeaderMap::new(&bf);
@@ -35,11 +28,11 @@ Execute ```cp -r ../blender-file/resources . && cargo watch -x run -w . -w ../bl
   let vert = &fbh_map.get(&out);
   println!("{:?}", vert);
 
-  let structure = sdna.get_structure_by_index(vert.unwrap().sdna_index);
+  let structure = sdna.structure_by_index(vert.unwrap().sdna_index);
   println!("{}", structure.unwrap().pretty_print());
 
+  let vert = sdna.query(&bf, &fbh_map, "OB", "data");
+  println!("{:?}", vert);
 
-```
-## Run
+}
 
-```cargo run --bin blender-file-test```
