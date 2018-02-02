@@ -42,4 +42,4 @@ Execute ```cp -r ../blender-file/resources . && cargo watch -x run -w . -w ../bl
 ```
 ## Run
 
-```cargo run --bin blender-file-test```
+```cargo run --bin blender-file-example```
